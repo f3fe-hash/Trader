@@ -1,18 +1,19 @@
 from stock import Database
 from model import StockModel
 
-LOAD_MODEL: bool    = True
+LOAD_MODEL: bool    = False
 SAVE_MODEL: bool    = True
 TRAIN_MODEL: bool   = True
-TRAIN_EPOCHS: int   = 5
+TRAIN_EPOCHS: int   = 100
 MODEL_FILENAME: str = "data/model.keras"
 
 def forecast(ticker: str):
     global database
     global model
     stock = database.get(ticker)
-    price = model.predict(stock)
-    print("Price for ticker %s: $%.2f" % (ticker, price))
+    direction = model.predict(stock)
+
+    print("Direction of ticker %s: %d" % (ticker, direction))
 
 # Main function
 def main():
