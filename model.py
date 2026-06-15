@@ -5,7 +5,6 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = '0'
 
 import numpy as np
 import tensorflow as tf
-import time
 from keras.models import Sequential, load_model
 from keras.layers import LSTM, Dense, Masking, Dropout, Conv1D, Input
 from keras.optimizers import Adam
@@ -78,7 +77,6 @@ class StockModel:
         print("\t- Processing dataset")
         X = []
         y = []
-        t1 = time.time()
         for stock in self.stocks:
             if len(stock.frames) < 2:
                 continue
@@ -91,10 +89,7 @@ class StockModel:
             # Create training samples
             # Start at 50 because some functions calculate datta for 50 days
             for i in range(WINDOW_SIZE + 50, len(stock.frames)):
-                sequence = [
-                    self.preprocess_frame(stock, j)
-                    for j in range(i-WINDOW_SIZE,i)
-                ]
+                sequence = stock_features[i-WINDOW_SIZE:i]
 
                 target_frame = stock.frames[i]
                 prev_frame = stock.frames[i-1]
@@ -105,8 +100,6 @@ class StockModel:
 
                 X.append(sequence)
                 y.append(target)
-        t2 = time.time()
-        print("%.2f seconds" % (t2 - t1))
 
         if not X:
             raise ValueError("No training samples generated")
