@@ -6,7 +6,7 @@ from datetime import date, datetime
 from tui import TUI, TUI_HEADING
 
 def get_filepath(ticker: str) -> str:
-    return "data/stocks_%s.csv" % ticker.lower()
+    return "data/stocks/%s.csv" % ticker.lower()
 
 def exists(filename: str):
     return Path(filename).is_file()
@@ -180,6 +180,7 @@ class Database:
             self.download_stock(ticker)
 
     def download_stock(self, ticker: str):
+        ticker = ticker.replace(".", "-")
         file_path = get_filepath(ticker)
 
         df = yf.download(

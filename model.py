@@ -13,8 +13,8 @@ from keras.preprocessing.sequence import pad_sequences
 
 from stock import StockFrame, Database, Stock
 
-BATCH_SIZE = 32
-WINDOW_SIZE = 100
+BATCH_SIZE = 64
+WINDOW_SIZE = 40
 
 # Log returns:         5 values
 # Intraday momentum:   3 values
@@ -75,51 +75,30 @@ class StockModel:
         )
 
         print("\t- Processing dataset")
-        X = []
-        y = []
-        for stock in self.stocks:
-            if len(stock.frames) < 2:
-                continue
-
-            stock_features = [
-                self.preprocess_frame(stock, i)
-                for i in range(50, len(stock.frames))
-            ]
-
-            # Create training samples
-            # Start at 50 because some functions calculate datta for 50 days
-            for i in range(WINDOW_SIZE + 50, len(stock.frames)):
-                sequence = stock_features[i-WINDOW_SIZE:i]
-
-                target_frame = stock.frames[i]
-                prev_frame = stock.frames[i-1]
-
-                close_diff = target_frame.close - prev_frame.close
-                target = np.zeros(shape=(1), dtype=np.float32)
-                target[0] = float(close_diff > 0)
-
-                X.append(sequence)
-                y.append(target)
-
-        if not X:
-            raise ValueError("No training samples generated")
-
-        X = pad_sequences(
-            X,
-            padding='post',
-            dtype='float32',
-            value=0.0
+        dataset = tf.data.Dataset.from_generator(
+            self._sample_generator,
+            output_signature=(
+                tf.TensorSpec(
+                    shape=(WINDOW_SIZE, STOCK_FEATURES),
+                    dtype=tf.float32
+                ),
+                tf.TensorSpec(
+                    shape=(1,),
+                    dtype=tf.float32
+                )
+            )
         )
 
-        y = np.array(y, dtype=np.float32)
+        dataset = dataset.shuffle(10000)
+        dataset = dataset.batch(BATCH_SIZE)
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
 
         print("\t- Start training")
         history = self._model.fit(
-            X,
-            y,
+            dataset,
             epochs=epochs,
             batch_size=BATCH_SIZE,
-            validation_split=0.1,
+            #validation_split=0.1,
             shuffle=True,
             verbose=1 # type: ignore
         )
@@ -128,6 +107,26 @@ class StockModel:
             self.save(filename)
         
         return history
+
+    def _sample_generator(self):
+        for stock in self.stocks:
+            if len(stock.frames) < WINDOW_SIZE + 50:
+                continue
+
+            stock_features = np.array([
+                self.preprocess_frame(stock, i)
+                for i in range(50, len(stock.frames))
+            ], dtype=np.float32)
+
+            for i in range(WINDOW_SIZE, len(stock_features)):
+                sequence = stock_features[i-WINDOW_SIZE:i]
+
+                target = float(
+                    stock.frames[i + 50].close >
+                    stock.frames[i + 49].close
+                )
+
+                yield sequence, np.array([target], dtype=np.float32)
     
     def save(self, filename):
         self._model.save(filename)
@@ -152,7 +151,7 @@ class StockModel:
             stock = self.stocks[i]
 
             for j in range(1, len(stock.frames)):
-                returns = stock.log_returns(i)
+                returns = stock.log_returns(j)
                 opens.append(returns[0])
                 closes.append(returns[1])
                 lows.append(returns[2])

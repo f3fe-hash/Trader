@@ -4,7 +4,7 @@ from model import StockModel
 LOAD_MODEL: bool    = True
 SAVE_MODEL: bool    = True
 TRAIN_MODEL: bool   = True
-TRAIN_EPOCHS: int   = 50
+TRAIN_EPOCHS: int   = 1
 MODEL_FILENAME: str = "data/model.keras"
 
 def forecast(ticker: str):
