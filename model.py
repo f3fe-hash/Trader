@@ -13,8 +13,10 @@ from keras.preprocessing.sequence import pad_sequences
 
 from stock import StockFrame, Database, Stock
 
-BATCH_SIZE = 64
-WINDOW_SIZE = 40
+BATCH_SIZE: int = 64
+WINDOW_SIZE: int = 40
+
+MODEL_FILENAME: str = "data/model.keras"
 
 # Log returns:         5 values
 # Intraday momentum:   3 values
@@ -22,13 +24,13 @@ WINDOW_SIZE = 40
 # Volatility features: 3 values
 # Volume features:     3 values
 # Moving averages:     4 values
-STOCK_FEATURES = 21
+STOCK_FEATURES: int = 21
 
 class StockModel:
     def __init__(self):
         self._model: Sequential = Sequential([
             # Preprocessing
-            Input((WINDOW_SIZE, STOCK_FEATURES)), # Input size (unknown b/c LSTM)
+            Input((WINDOW_SIZE, STOCK_FEATURES)), # Input size
 
             # Actual model
             Conv1D(32, kernel_size=3, activation='relu'),
@@ -43,18 +45,55 @@ class StockModel:
 
         self.stocks: list[Stock] = []
     
-    def predict(self, stock: Stock):
-        last = stock.frames[-1].close
-        start = max(1, len(stock.frames) - WINDOW_SIZE)
+    def predict(self, stock: Stock, t: int=-1, apply_noise=False) -> np.float32:
+        start = max(1, len(stock.frames) - WINDOW_SIZE - 51 - t)
         sequence = np.array([
             self.preprocess_frame(stock, i)
-            for i in range(start, len(stock.frames))
+            for i in range(start, start + WINDOW_SIZE)
         ], dtype=np.float32)
+
+        if apply_noise:
+            rng = np.random.default_rng()
+            bias = rng.uniform(low=-0.01, high=0.01, size=sequence.shape)
+            sequence = sequence + bias
         
         sequence = np.expand_dims(sequence, axis=0)
         pred = self._model.predict(sequence, verbose=0)[0] # type: ignore
         return pred[0]
     
+    def predict_range(self, stock: Stock, ts: list, apply_noise=False):
+        sequences = []
+        for t in ts:
+            start = max(1, len(stock.frames) - WINDOW_SIZE - 50 - t)
+            sequence = np.array([
+                self.preprocess_frame(stock, i)
+                for i in range(start, start + WINDOW_SIZE)
+            ], dtype=np.float32)
+
+            if apply_noise:
+                rng = np.random.default_rng()
+                bias = rng.uniform(low=-0.01, high=0.01, size=sequence.shape)
+                sequence = sequence + bias
+            
+            sequences.append(sequence)
+        
+        sequences_arr = np.array(sequences, dtype=np.float32)
+        preds = self._model.predict(sequences_arr, batch_size=512, verbose=0)[0] # type: ignore
+        return preds
+    
+    def forecast(self, stock, t=-1) -> (tuple[int, float] | None):
+        std_threshold = 0.1
+
+        # Generate a bunch of (slightly) randomly modified guesses
+        ts = [t for _ in range(50)]
+        preds = self.predict_range(stock, ts, True)
+
+        if np.abs(np.std(preds)) < std_threshold:
+            mean = np.mean(preds)
+            return (int(mean), float(mean))
+        else:
+            return None
+
     def train(self, epochs, load=True, save=True, filename=""):
         print("=== Training the Model")
         if load:
@@ -176,27 +215,27 @@ class StockModel:
             np.std(volumes)
         ], dtype=np.float32)
 
-        #returns = []
-
-        #for stock in self.stocks:
-        #    for i in range(1, len(stock.frames)):
-        #        r = np.log(stock.frames[i].close) - np.log(stock.frames[i - 1].close)
-        #        returns.append(r)
-
         # Avoid division by zero
         self.std[self.std == 0] = 1.0
-
-        #if self.return_std == 0:
-        #    self.return_std = 1.0
     
     def preprocess_frame(self, stock: Stock, t: int) -> np.ndarray:
-        values = stock.log_returns(t)             # 5 values
-        momentum = stock.intraday_momentum(t)     # 3 values
-        returns = stock.rolling_returns(t)        # 3 values
-        volatility = stock.volatility_features(t) # 3 values
-        volume = stock.volume_features(t)         # 3 values
-        mov_avgs = stock.moving_averages(t)       # 4 values
-        return np.concatenate([(values - self.mean) / self.std, momentum, returns, volatility, volume, mov_avgs])
+        values = stock.log_returns(t)
+        momentum = stock.intraday_momentum(t)
+        returns = stock.rolling_returns(t)
+        volatility = stock.volatility_features(t)
+        volume = stock.volume_features(t)
+        mov_avgs = stock.moving_averages(t)
+
+        out = np.empty(STOCK_FEATURES, dtype=np.float32) # 21 Stock features
+
+        out[:5] = (values - self.mean) / self.std
+        out[5:8] = momentum
+        out[8:11] = returns
+        out[11:14] = volatility
+        out[14:17] = volume
+        out[17:21] = mov_avgs
+
+        return out
 
     def load_stocks(self, data: Database):
         print("=== Loading Stocks into Model ===")

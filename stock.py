@@ -139,15 +139,16 @@ class Stock:
             sma_20_ratio - 1,
             sma_50_ratio - 1
         ], dtype=np.float32)
-    
-    def stochastic_oscillator(self, t: int):
-        pass
 
 class Database:
-    def __init__(self):
+    def __init__(self, do_load_index=False):
         self.stocks: list[Stock] = []
         self.tickers: list[str] = []
         self.stocks_dict: dict[str, Stock] = {}
+
+        if do_load_index:
+            self.load_index()
+            self.update()
     
     def get(self, ticker: str) -> Stock:
         return self.stocks_dict[ticker]

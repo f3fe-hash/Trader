@@ -1,17 +1,16 @@
 from stock import Database
-from model import StockModel
+from model import StockModel, MODEL_FILENAME
 
 LOAD_MODEL: bool    = True
 SAVE_MODEL: bool    = True
 TRAIN_MODEL: bool   = True
-TRAIN_EPOCHS: int   = 1
-MODEL_FILENAME: str = "data/model.keras"
+TRAIN_EPOCHS: int   = 55
 
 def forecast(ticker: str):
     global database
     global model
     stock = database.get(ticker)
-    direction = model.predict(stock)
+    direction = model.forecast(stock)
 
     print("Direction of ticker %s: %d" % (ticker, direction))
 
@@ -21,9 +20,7 @@ def main():
     global model
     
     # Load in all of the stock data
-    database = Database()
-    database.load_index()
-    database.update()
+    database = Database(do_load_index=True)
 
     # Load the stock data into the model
     model = StockModel()
